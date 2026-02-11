@@ -83,4 +83,11 @@ fn mapping_workflow_marks_missing_controls() {
         .mapping_review_rows
         .iter()
         .any(|row| row.status == "MISSING"));
+    let pdf = out
+        .deliverables
+        .iter()
+        .find(|(path, _, _)| path.ends_with("evidence_index.pdf"))
+        .map(|(_, bytes, _)| bytes.clone())
+        .expect("expected evidence_index.pdf deliverable");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
 }

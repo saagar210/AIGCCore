@@ -131,6 +131,7 @@ fn evaluate_evidenceos_outputs_gate(bundle_zip: &Path) -> CoreResult<(String, St
     let required = [
         "exports/evidenceos/deliverables/evidence_index.csv",
         "exports/evidenceos/deliverables/evidence_index.md",
+        "exports/evidenceos/deliverables/evidence_index.pdf",
         "exports/evidenceos/deliverables/evidence_narrative.md",
         "exports/evidenceos/deliverables/missing_evidence_checklist.md",
     ];

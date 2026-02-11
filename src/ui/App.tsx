@@ -25,6 +25,15 @@ type EvidenceOsRunResult = {
   missing_control_ids: string[];
 };
 
+type EvidenceOsRunInput = {
+  enabled_capabilities: string[];
+  artifact_title: string;
+  artifact_body: string;
+  artifact_tags_csv: string;
+  control_families_csv: string;
+  claim_text: string;
+};
+
 export function App() {
   const [snap, setSnap] = useState<NetworkSnapshot | null>(null);
   const [controls, setControls] = useState<ControlDefinition[]>([]);
@@ -32,6 +41,17 @@ export function App() {
   const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [selectedCapability, setSelectedCapability] = useState("ALL");
+  const [artifactTitle, setArtifactTitle] = useState("Network policy evidence");
+  const [artifactBody, setArtifactBody] = useState(
+    "Audit log excerpt proving offline mode and blocked egress."
+  );
+  const [artifactTags, setArtifactTags] = useState("OPS,NETWORK");
+  const [controlFamilies, setControlFamilies] = useState(
+    "Auditability,NetworkGovernance,Traceability"
+  );
+  const [claimText, setClaimText] = useState(
+    "The run stayed offline and blocked non-allowlisted egress requests."
+  );
   const status = useMemo(() => {
     if (!snap) return "Loading…";
     return `${snap.network_mode} (${snap.proof_level})`;
@@ -73,7 +93,19 @@ export function App() {
     setRunning(true);
     setRunError(null);
     try {
-      const result = await invoke<EvidenceOsRunResult>("generate_evidenceos_bundle_demo");
+      const payload: EvidenceOsRunInput = {
+        enabled_capabilities:
+          selectedCapability === "ALL" ? [] : [selectedCapability],
+        artifact_title: artifactTitle,
+        artifact_body: artifactBody,
+        artifact_tags_csv: artifactTags,
+        control_families_csv: controlFamilies,
+        claim_text: claimText
+      };
+      const result = await invoke<EvidenceOsRunResult>(
+        "generate_evidenceos_bundle",
+        { input: payload }
+      );
       setRunResult(result);
     } catch (error) {
       setRunError(String(error));
@@ -122,6 +154,40 @@ export function App() {
               ))}
             </select>
           </div>
+          <div className="form-grid">
+            <label htmlFor="artifact-title">Artifact title</label>
+            <input
+              id="artifact-title"
+              value={artifactTitle}
+              onChange={(event) => setArtifactTitle(event.target.value)}
+            />
+            <label htmlFor="artifact-body">Artifact text</label>
+            <textarea
+              id="artifact-body"
+              rows={3}
+              value={artifactBody}
+              onChange={(event) => setArtifactBody(event.target.value)}
+            />
+            <label htmlFor="artifact-tags">Artifact tags (CSV)</label>
+            <input
+              id="artifact-tags"
+              value={artifactTags}
+              onChange={(event) => setArtifactTags(event.target.value)}
+            />
+            <label htmlFor="control-families">Control families (CSV)</label>
+            <input
+              id="control-families"
+              value={controlFamilies}
+              onChange={(event) => setControlFamilies(event.target.value)}
+            />
+            <label htmlFor="claim-text">Narrative claim</label>
+            <textarea
+              id="claim-text"
+              rows={3}
+              value={claimText}
+              onChange={(event) => setClaimText(event.target.value)}
+            />
+          </div>
           <div className="controls-grid">
             {filteredControls.map((control) => (
               <article key={control.control_id} className="control-card">
@@ -135,7 +201,7 @@ export function App() {
             ))}
           </div>
           <button type="button" disabled={running} onClick={onRunEvidenceOs}>
-            {running ? "Generating EvidenceOS Bundle…" : "Generate EvidenceOS Demo Bundle"}
+            {running ? "Generating EvidenceOS Bundle…" : "Generate EvidenceOS Bundle"}
           </button>
           {runError && <p className="error">Phase 3 run failed: {runError}</p>}
           {runResult && (

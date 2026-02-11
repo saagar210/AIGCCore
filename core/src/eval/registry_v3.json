@@ -282,6 +282,7 @@
         "required_deliverables": [
           "exports/evidenceos/deliverables/evidence_index.csv",
           "exports/evidenceos/deliverables/evidence_index.md",
+          "exports/evidenceos/deliverables/evidence_index.pdf",
           "exports/evidenceos/deliverables/evidence_narrative.md",
           "exports/evidenceos/deliverables/missing_evidence_checklist.md"
         ]
@@ -289,6 +290,7 @@
       "evidence_required": [
         "exports/evidenceos/deliverables/evidence_index.csv",
         "exports/evidenceos/deliverables/evidence_index.md",
+        "exports/evidenceos/deliverables/evidence_index.pdf",
         "exports/evidenceos/deliverables/evidence_narrative.md",
         "exports/evidenceos/deliverables/missing_evidence_checklist.md"
       ]

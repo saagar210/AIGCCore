@@ -8,8 +8,8 @@ use super::control_library::{controls_for_capabilities, ControlDefinition};
 use super::model::{EvidenceItem, NarrativeClaimInput};
 use super::narrative::render_narrative_markdown;
 use super::render::{
-    render_evidence_index_csv, render_evidence_index_markdown, render_missing_checklist_markdown,
-    MappingReviewRow,
+    render_evidence_index_csv, render_evidence_index_markdown, render_evidence_index_pdf,
+    render_missing_checklist_markdown, MappingReviewRow,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,11 +89,13 @@ pub fn generate_evidenceos_artifacts(req: &EvidenceOsRequest) -> CoreResult<Evid
 
     let evidence_index_csv = render_evidence_index_csv(&evidence_items)?;
     let evidence_index_md = render_evidence_index_markdown(&evidence_items);
+    let evidence_index_pdf = render_evidence_index_pdf(&evidence_items);
     let missing_md = render_missing_checklist_markdown(&missing_control_ids, &mapping_rows);
     let (narrative_md, claim_ranges) = render_narrative_markdown(&req.narrative_claims);
 
     let evidence_index_csv_path = format!("exports/{}/deliverables/evidence_index.csv", req.pack_id);
     let evidence_index_md_path = format!("exports/{}/deliverables/evidence_index.md", req.pack_id);
+    let evidence_index_pdf_path = format!("exports/{}/deliverables/evidence_index.pdf", req.pack_id);
     let missing_path = format!(
         "exports/{}/deliverables/missing_evidence_checklist.md",
         req.pack_id
@@ -171,6 +173,12 @@ pub fn generate_evidenceos_artifacts(req: &EvidenceOsRequest) -> CoreResult<Evid
                 "render_engine": { "name": "core_template_renderer", "version": "0.0.0" }
             },
             {
+                "template_id": "evidence_index_pdf",
+                "template_version": "1.0.0",
+                "output_paths": [evidence_index_pdf_path],
+                "render_engine": { "name": "core_template_renderer", "version": "0.0.0" }
+            },
+            {
                 "template_id": "evidence_mapping_review_json",
                 "template_version": "1.0.0",
                 "output_paths": [review_path],
@@ -201,6 +209,11 @@ pub fn generate_evidenceos_artifacts(req: &EvidenceOsRequest) -> CoreResult<Evid
             format!("exports/{}/deliverables/evidence_index.md", req.pack_id),
             evidence_index_md.into_bytes(),
             "text/markdown".to_string(),
+        ),
+        (
+            format!("exports/{}/deliverables/evidence_index.pdf", req.pack_id),
+            evidence_index_pdf,
+            "application/pdf".to_string(),
         ),
         (
             format!(

@@ -13,6 +13,7 @@ Phase 3 (EvidenceOS Pack) is implemented in this repository on top of the Phase 
 - Evidence mapping review + missing checklist generation: PASS
 - Narrative generation with strict citation enforcement ("no citation, no claim"): PASS
 - Evidence Index outputs generated (`.csv` + `.md`): PASS
+- Evidence Index deterministic PDF output generated (`.pdf`): PASS
 - Evidence Bundle v1 export path remains Core-managed (RunManager/export pipeline): PASS
 - Phase 3 deterministic artifacts stable across two identical runs: PASS
 - Phase 2 hard guarantees preserved (offline, validator, stable gate IDs): PASS
@@ -33,6 +34,7 @@ Phase 3 (EvidenceOS Pack) is implemented in this repository on top of the Phase 
   - `EVIDENCEOS.OUTPUTS_PRESENT_V1`
   - `EVIDENCEOS.MAPPING_REVIEW_PRESENT_V1`
 - Determinism check passed by comparing SHA-256 of two consecutive Phase 3 bundle exports with identical inputs.
+- Desktop flow supports user-provided EvidenceOS run inputs (artifact, claim text, tags, control families, capabilities).
 
 ## Remaining Scope
 
