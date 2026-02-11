@@ -1,0 +1,17 @@
+{
+  "productName": "AIGC Core",
+  "version": "0.0.0",
+  "identifier": "com.example.aigccore",
+  "build": {
+    "beforeDevCommand": "pnpm dev:ui",
+    "beforeBuildCommand": "pnpm build:ui",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self';"
+    }
+  }
+}
+

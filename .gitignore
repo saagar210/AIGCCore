@@ -1,0 +1,19 @@
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Tauri / Rust
+target/
+src-tauri/target/
+
+# OS / tooling
+.DS_Store
+
+# Local vault data (runtime)
+.aigc/
+
+# Editor
+.idea/
+.vscode/
+

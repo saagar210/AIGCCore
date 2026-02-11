@@ -1,0 +1,10 @@
+[package]
+name = "bundle_validator"
+version = "0.0.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[dependencies]
+aigc_core = { path = "../../core" }
+serde_json = "1.0.120"
+

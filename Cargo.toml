@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+  "core",
+  "src-tauri",
+  "tools/bundle_validator",
+  "tools/gate_runner",
+]

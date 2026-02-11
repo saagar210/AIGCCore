@@ -1,0 +1,205 @@
+# Bundle Validator Checklist v3 (LOCKED)
+
+Version: bundle_validator_v3  
+Status: LOCKED (semantic requirements; implementation may evolve but must enforce this checklist)  
+Purpose: Defines what it means for an Evidence Bundle v1 to be “valid” and exportable.
+
+**Compatibility note:** Check IDs are preserved; this v2 clarifies schemas (LOCATOR_SCHEMA_V1, REDACTION_SCHEMA_V1, TEMPLATES_USED_V1), canonicalization reference, and adds explicit artifact-bytes inclusion to make verification real.
+
+---
+
+## Checklist JSON (authoritative)
+```json
+{
+  "checklist_version": "bundle_validator_v3",
+  "checks": [
+    {
+      "check_id": "CHK.BUNDLE.REQUIRED_FILES",
+      "severity": "BLOCKER",
+      "description": "Bundle contains all required files and directories per Evidence Bundle v1, including inputs_snapshot/artifact_list.json. Raw input bytes are governed by export_profile (see Phase 2.5 lock addendum).",
+      "validate": {
+        "must_exist": [
+          "BUNDLE_INFO.json",
+          "run_manifest.json",
+          "audit_log.ndjson",
+          "eval_report.json",
+          "artifact_hashes.csv",
+          "inputs_snapshot/artifact_list.json",
+          "inputs_snapshot/policy_snapshot.json",
+          "inputs_snapshot/network_snapshot.json",
+          "inputs_snapshot/model_snapshot.json",
+          "exports/"
+        ]
+      }
+    },
+    {
+      "check_id": "CHK.EXPORTS.ATTACHMENTS_LAYOUT",
+      "severity": "BLOCKER",
+      "description": "Exports layout contains deliverables and attachments; templates_used.json must exist for each pack export.",
+      "validate": {
+        "exports": {
+          "must_have_dirs": [
+            "deliverables",
+            "attachments"
+          ],
+          "attachments_must_exist": [
+            "templates_used.json"
+          ],
+          "attachments_must_validate": {
+            "templates_used.json": "TEMPLATES_USED_V1"
+          }
+        }
+      }
+    },
+    {
+      "check_id": "CHK.ARTIFACT_HASHES.VERIFY",
+      "severity": "BLOCKER",
+      "description": "All artifacts referenced in artifact_hashes.csv are present and hash-match.",
+      "validate": {
+        "artifact_hashes_csv": {
+          "hash_algo": "SHA-256",
+          "input_export_profile_path": "inputs_snapshot/policy_snapshot.json:export_profile.inputs",
+          "if_inputs_profile_hash_only": {
+            "require_audit_ingest_anchor": true,
+            "require_manifest_hash_alignment": true
+          },
+          "if_inputs_profile_include_bytes": {
+            "require_inputs_snapshot_artifacts_dir": true,
+            "recompute_input_hash_match": true
+          },
+          "all_listed_paths_present_when_path_non_empty": true,
+          "recompute_hash_match_when_path_non_empty": true,
+          "row_order": "SORT_BY_ARTIFACT_ID_THEN_PATH"
+        }
+      }
+    },
+    {
+      "check_id": "CHK.AUDIT.REQUIRED_KEYS_AND_CHAIN",
+      "severity": "BLOCKER",
+      "description": "Audit log uses required event keys and hash-chain verifies using Phase 2.5 canonicalization rules.",
+      "validate": {
+        "audit_log_ndjson": {
+          "required_event_keys": [
+            "ts_utc",
+            "event_type",
+            "run_id",
+            "vault_id",
+            "actor",
+            "details",
+            "prev_event_hash",
+            "event_hash"
+          ],
+          "hash_algo": "SHA-256",
+          "canonicalization": "PHASE_2_5_LOCK_ADDENDUM_V2_5_LOCK_4",
+          "prev_hash_links_valid": true,
+          "event_hash_recompute_match": true
+        }
+      }
+    },
+    {
+      "check_id": "CHK.NETWORK.SNAPSHOT_PRESENT",
+      "severity": "BLOCKER",
+      "description": "Network snapshot includes mode, proof level, allowlist, UI blocking flag, and adapter endpoint validations.",
+      "validate": {
+        "json_path": "inputs_snapshot/network_snapshot.json",
+        "required_fields": [
+          "network_mode",
+          "proof_level",
+          "allowlist",
+          "ui_remote_fetch_disabled",
+          "adapter_endpoints"
+        ]
+      }
+    },
+    {
+      "check_id": "CHK.CITATIONS.STRICT",
+      "severity": "BLOCKER",
+      "description": "Strict mode requires citations_map.json under attachments and valid locators.",
+      "validate": {
+        "conditional": {
+          "if_policy": "STRICT",
+          "must_exist_glob": [
+            "exports/**/attachments/citations_map.json"
+          ],
+          "citations_schema": "LOCATOR_SCHEMA_V1",
+          "artifact_refs_in_hashes_csv": true,
+          "requires_claim_markers": "<!-- CLAIM:C#### -->",
+          "every_claim_has_citation": true
+        }
+      }
+    },
+    {
+      "check_id": "CHK.REDACTION.POLICY_GATE",
+      "severity": "BLOCKER",
+      "description": "If policy requires redaction, redactions_map.json must exist under attachments and validate.",
+      "validate": {
+        "conditional": {
+          "if_policy_requires_redaction": true,
+          "must_exist_glob": [
+            "exports/**/attachments/redactions_map.json"
+          ],
+          "redactions_schema": "REDACTION_SCHEMA_V1",
+          "required_redactions_definition": "Per Phase_2_5_Lock_Addendum_v2.5-lock-4 \u00a76.3"
+        }
+      }
+    },
+    {
+      "check_id": "CHK.MODEL.PINNING_LEVEL",
+      "severity": "BLOCKER",
+      "description": "Model snapshot includes sufficient pinning level for the active policy.",
+      "validate": {
+        "json_path": "inputs_snapshot/model_snapshot.json",
+        "allowed_pinning_levels_by_policy": {
+          "STRICT": [
+            "CRYPTO_PINNED",
+            "VERSION_PINNED"
+          ],
+          "BALANCED": [
+            "VERSION_PINNED",
+            "CRYPTO_PINNED"
+          ],
+          "DRAFT_ONLY": [
+            "NAME_ONLY",
+            "VERSION_PINNED",
+            "CRYPTO_PINNED"
+          ]
+        }
+      }
+    },
+    {
+      "check_id": "CHK.EVAL.REPORT_AND_GATES",
+      "severity": "BLOCKER",
+      "description": "Eval report exists, references a registry version, and gate IDs are valid.",
+      "validate": {
+        "json_path": "eval_report.json",
+        "required_fields": [
+          "overall_status",
+          "gates"
+        ],
+        "gate_ids_must_exist_in_registry": true,
+        "allowed_registry_versions": [
+          "gates_registry_v1",
+          "gates_registry_v2"
+        ]
+      }
+    },
+    {
+      "check_id": "CHK.DETERMINISM.ZIP_RULES",
+      "severity": "MAJOR",
+      "description": "When determinism is enabled, zip packaging rules are satisfied (sorted paths, epoch mtimes, fixed compression).",
+      "validate": {
+        "conditional": {
+          "if_determinism_enabled": true,
+          "zip_sort_order": "LEX_PATH",
+          "zip_mtime": 0,
+          "compression_fixed": true,
+          "zip_compression_method": "DEFLATE",
+          "zip_compression_level": 9
+        }
+      }
+    }
+  ]
+}
+```
+
+End.
