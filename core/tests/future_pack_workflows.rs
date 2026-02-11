@@ -32,14 +32,11 @@ fn redline_workflow_requires_artifact_and_valid_transition() {
         review_profile: "default".to_string(),
     };
     let state = RedlineWorkflowState::ingest(ok).expect("ingest");
-    assert!(state.transition(RedlineWorkflowStage::ExportReady).is_err());
-    assert!(
-        state
-            .transition(RedlineWorkflowStage::Analyzed)
-            .expect("transition")
-            .stage
-            == RedlineWorkflowStage::Analyzed
-    );
+    assert!(state.clone().transition(RedlineWorkflowStage::ExportReady).is_err());
+    let analyzed_state = state
+        .transition(RedlineWorkflowStage::Analyzed)
+        .expect("transition");
+    assert_eq!(analyzed_state.stage, RedlineWorkflowStage::Analyzed);
 }
 
 #[test]
