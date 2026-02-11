@@ -10,12 +10,30 @@ use aigc_core::evidence_bundle::schemas::*;
 use aigc_core::evidenceos::control_library::{controls_for_capabilities, ControlDefinition};
 use aigc_core::evidenceos::model::{CitationInput, EvidenceItem, NarrativeClaimInput};
 use aigc_core::evidenceos::workflow::{generate_evidenceos_artifacts, EvidenceOsRequest};
+use aigc_core::financeos::model::FinanceOsInputV1;
+use aigc_core::financeos::render::output_manifest as finance_output_manifest;
+use aigc_core::financeos::workflow::FinanceWorkflowState;
+use aigc_core::healthcareos::model::HealthcareOsInputV1;
+use aigc_core::healthcareos::render::output_manifest as healthcare_output_manifest;
+use aigc_core::healthcareos::workflow::HealthcareWorkflowState;
+use aigc_core::incidentos::model::IncidentOsInputV1;
+use aigc_core::incidentos::render::output_manifest as incident_output_manifest;
+use aigc_core::incidentos::workflow::IncidentWorkflowState;
 use aigc_core::policy::network_snapshot::{AdapterEndpointSnapshot, NetworkSnapshot};
 use aigc_core::policy::types::{InputExportProfile, NetworkMode, PolicyMode, ProofLevel};
+use aigc_core::redlineos::model::RedlineOsInputV1;
+use aigc_core::redlineos::render::output_manifest as redline_output_manifest;
+use aigc_core::redlineos::workflow::RedlineWorkflowState;
 use aigc_core::run::manager::{ExportRequest, RunManager};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Serialize)]
+struct PackCommandStatus {
+    status: String,
+    message: String,
+}
 
 #[derive(Debug, Serialize)]
 struct UiNetworkSnapshot {
@@ -186,12 +204,12 @@ fn generate_evidenceos_bundle(input: EvidenceOsRunInput) -> Result<EvidenceOsRun
     let citations_rel = format!("exports/{}/attachments/citations_map.json", pack_id);
     let redactions_rel = format!("exports/{}/attachments/redactions_map.json", pack_id);
 
-    let templates_bytes =
-        json_canonical::to_canonical_bytes(&generated.templates_used_json).map_err(|e| e.to_string())?;
-    let citations_bytes =
-        json_canonical::to_canonical_bytes(&generated.citations_map_json).map_err(|e| e.to_string())?;
-    let redactions_bytes =
-        json_canonical::to_canonical_bytes(&generated.redactions_map_json).map_err(|e| e.to_string())?;
+    let templates_bytes = json_canonical::to_canonical_bytes(&generated.templates_used_json)
+        .map_err(|e| e.to_string())?;
+    let citations_bytes = json_canonical::to_canonical_bytes(&generated.citations_map_json)
+        .map_err(|e| e.to_string())?;
+    let redactions_bytes = json_canonical::to_canonical_bytes(&generated.redactions_map_json)
+        .map_err(|e| e.to_string())?;
 
     let mut hash_rows = vec![ArtifactHashRow {
         artifact_id: artifact_id.clone(),
@@ -376,6 +394,62 @@ fn generate_evidenceos_bundle(input: EvidenceOsRunInput) -> Result<EvidenceOsRun
     })
 }
 
+#[tauri::command]
+fn run_redlineos(input: RedlineOsInputV1) -> Result<PackCommandStatus, String> {
+    let _state = RedlineWorkflowState::ingest(input).map_err(|e| e.to_string())?;
+    let manifest = redline_output_manifest();
+    Ok(PackCommandStatus {
+        status: "READY".to_string(),
+        message: format!(
+            "Stage 0 scaffold validated. {} deliverables, {} attachments declared.",
+            manifest.deliverable_paths.len(),
+            manifest.attachment_paths.len()
+        ),
+    })
+}
+
+#[tauri::command]
+fn run_incidentos(input: IncidentOsInputV1) -> Result<PackCommandStatus, String> {
+    let _state = IncidentWorkflowState::ingest(input).map_err(|e| e.to_string())?;
+    let manifest = incident_output_manifest();
+    Ok(PackCommandStatus {
+        status: "READY".to_string(),
+        message: format!(
+            "Stage 0 scaffold validated. {} deliverables, {} attachments declared.",
+            manifest.deliverable_paths.len(),
+            manifest.attachment_paths.len()
+        ),
+    })
+}
+
+#[tauri::command]
+fn run_financeos(input: FinanceOsInputV1) -> Result<PackCommandStatus, String> {
+    let _state = FinanceWorkflowState::ingest(input).map_err(|e| e.to_string())?;
+    let manifest = finance_output_manifest();
+    Ok(PackCommandStatus {
+        status: "READY".to_string(),
+        message: format!(
+            "Stage 0 scaffold validated. {} deliverables, {} attachments declared.",
+            manifest.deliverable_paths.len(),
+            manifest.attachment_paths.len()
+        ),
+    })
+}
+
+#[tauri::command]
+fn run_healthcareos(input: HealthcareOsInputV1) -> Result<PackCommandStatus, String> {
+    let _state = HealthcareWorkflowState::ingest(input).map_err(|e| e.to_string())?;
+    let manifest = healthcare_output_manifest();
+    Ok(PackCommandStatus {
+        status: "READY".to_string(),
+        message: format!(
+            "Stage 0 scaffold validated. {} deliverables, {} attachments declared.",
+            manifest.deliverable_paths.len(),
+            manifest.attachment_paths.len()
+        ),
+    })
+}
+
 fn make_runtime_dir() -> Result<std::path::PathBuf, String> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -402,7 +476,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_network_snapshot,
             list_control_library,
-            generate_evidenceos_bundle
+            generate_evidenceos_bundle,
+            run_redlineos,
+            run_incidentos,
+            run_financeos,
+            run_healthcareos
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

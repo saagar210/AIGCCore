@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { FinanceOSPanel } from "./packs/FinanceOSPanel";
+import { HealthcareOSPanel } from "./packs/HealthcareOSPanel";
+import { IncidentOSPanel } from "./packs/IncidentOSPanel";
+import { RedlineOSPanel } from "./packs/RedlineOSPanel";
+import type { PackCommandStatus } from "./packs/types";
 
 type NetworkSnapshot = {
   network_mode: "OFFLINE" | "ONLINE_ALLOWLISTED";
@@ -52,6 +57,11 @@ export function App() {
   const [claimText, setClaimText] = useState(
     "The run stayed offline and blocked non-allowlisted egress requests."
   );
+
+  const [futurePackRunning, setFuturePackRunning] = useState<string | null>(null);
+  const [futurePackResult, setFuturePackResult] = useState<Record<string, PackCommandStatus>>({});
+  const [futurePackError, setFuturePackError] = useState<Record<string, string>>({});
+
   const status = useMemo(() => {
     if (!snap) return "Loading…";
     return `${snap.network_mode} (${snap.proof_level})`;
@@ -112,6 +122,20 @@ export function App() {
       setRunResult(null);
     } finally {
       setRunning(false);
+    }
+  };
+
+  const runFuturePack = async (command: string, input: unknown) => {
+    setFuturePackRunning(command);
+    setFuturePackError((prev) => ({ ...prev, [command]: "" }));
+    try {
+      const result = await invoke<PackCommandStatus>(command, { input });
+      setFuturePackResult((prev) => ({ ...prev, [command]: result }));
+    } catch (error) {
+      setFuturePackError((prev) => ({ ...prev, [command]: String(error) }));
+      setFuturePackResult((prev) => ({ ...prev, [command]: { status: "FAILED", message: String(error) } }));
+    } finally {
+      setFuturePackRunning(null);
     }
   };
 
@@ -220,6 +244,63 @@ export function App() {
             </div>
           )}
         </section>
+
+        <RedlineOSPanel
+          running={futurePackRunning === "run_redlineos"}
+          result={futurePackResult.run_redlineos ?? null}
+          error={futurePackError.run_redlineos ?? null}
+          onRun={() =>
+            runFuturePack("run_redlineos", {
+              schema_version: "REDLINEOS_INPUT_V1",
+              contract_artifacts: [{ artifact_id: "a_demo", sha256: "demo", filename: "contract.pdf" }],
+              extraction_mode: "OCR",
+              jurisdiction_hint: "US-CA",
+              review_profile: "default"
+            })
+          }
+        />
+        <IncidentOSPanel
+          running={futurePackRunning === "run_incidentos"}
+          result={futurePackResult.run_incidentos ?? null}
+          error={futurePackError.run_incidentos ?? null}
+          onRun={() =>
+            runFuturePack("run_incidentos", {
+              schema_version: "INCIDENTOS_INPUT_V1",
+              incident_artifacts: [{ artifact_id: "i_demo", sha256: "demo", source_type: "syslog" }],
+              timeline_start_hint: null,
+              timeline_end_hint: null,
+              customer_redaction_profile: "strict"
+            })
+          }
+        />
+        <FinanceOSPanel
+          running={futurePackRunning === "run_financeos"}
+          result={futurePackResult.run_financeos ?? null}
+          error={futurePackError.run_financeos ?? null}
+          onRun={() =>
+            runFuturePack("run_financeos", {
+              schema_version: "FINANCEOS_INPUT_V1",
+              finance_artifacts: [{ artifact_id: "f_demo", sha256: "demo", artifact_kind: "invoice" }],
+              period: "2026-01",
+              exception_rules_profile: "default",
+              retention_profile: "ret_min"
+            })
+          }
+        />
+        <HealthcareOSPanel
+          running={futurePackRunning === "run_healthcareos"}
+          result={futurePackResult.run_healthcareos ?? null}
+          error={futurePackError.run_healthcareos ?? null}
+          onRun={() =>
+            runFuturePack("run_healthcareos", {
+              schema_version: "HEALTHCAREOS_INPUT_V1",
+              consent_artifacts: [{ artifact_id: "c_demo", sha256: "demo", artifact_kind: "consent" }],
+              transcript_artifacts: [{ artifact_id: "t_demo", sha256: "demo", artifact_kind: "transcript" }],
+              draft_template_profile: "soap",
+              verifier_identity: "clinician_1"
+            })
+          }
+        />
       </main>
     </div>
   );
