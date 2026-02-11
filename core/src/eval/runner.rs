@@ -38,11 +38,17 @@ impl EvalRunner {
         // This keeps gate outputs stable and enforces the checklist semantics.
         let summary = BundleValidator::new_v3().validate_zip(bundle_zip, policy)?;
         let (allowlist_result, allowlist_msg) = evaluate_offline_allowlist_gate(bundle_zip)?;
+        let (evidence_outputs_result, evidence_outputs_msg) =
+            evaluate_evidenceos_outputs_gate(bundle_zip)?;
+        let (mapping_review_result, mapping_review_msg) =
+            evaluate_evidenceos_mapping_review_gate(bundle_zip)?;
         Ok(map_validator_to_gates(
             &summary,
             &self.registry,
             policy,
             (allowlist_result, allowlist_msg),
+            (evidence_outputs_result, evidence_outputs_msg),
+            (mapping_review_result, mapping_review_msg),
         ))
     }
 }
@@ -52,6 +58,8 @@ fn map_validator_to_gates(
     registry: &GateRegistry,
     policy: PolicyMode,
     allowlist_gate: (String, String),
+    evidence_outputs_gate: (String, String),
+    mapping_review_gate: (String, String),
 ) -> Vec<GateRunResult> {
     let policy_str = match policy {
         PolicyMode::STRICT => "STRICT",
@@ -88,6 +96,8 @@ fn map_validator_to_gates(
                 "NOT_APPLICABLE".to_string(),
                 "No PDFs in self-audit bundle".to_string(),
             ),
+            "EVIDENCEOS.OUTPUTS_PRESENT_V1" => evidence_outputs_gate.clone(),
+            "EVIDENCEOS.MAPPING_REVIEW_PRESENT_V1" => mapping_review_gate.clone(),
             _ => (
                 "NOT_APPLICABLE".to_string(),
                 "Gate not implemented in Phase 2 runner".to_string(),
@@ -115,6 +125,84 @@ fn evaluate_offline_allowlist_gate(bundle_zip: &Path) -> CoreResult<(String, Str
     let mut ndjson = String::new();
     f.read_to_string(&mut ndjson)?;
     Ok(evaluate_offline_allowlist_from_ndjson(&ndjson))
+}
+
+fn evaluate_evidenceos_outputs_gate(bundle_zip: &Path) -> CoreResult<(String, String)> {
+    let required = [
+        "exports/evidenceos/deliverables/evidence_index.csv",
+        "exports/evidenceos/deliverables/evidence_index.md",
+        "exports/evidenceos/deliverables/evidence_narrative.md",
+        "exports/evidenceos/deliverables/missing_evidence_checklist.md",
+    ];
+    let file = File::open(bundle_zip)?;
+    let mut zip = ZipArchive::new(file).map_err(|e| crate::error::CoreError::Zip(e.to_string()))?;
+    if !is_evidenceos_pack(&mut zip) {
+        return Ok(("NOT_APPLICABLE".to_string(), "not evidenceos pack".to_string()));
+    }
+    for path in required {
+        if zip.by_name(path).is_err() {
+            return Ok((
+                "FAIL".to_string(),
+                format!("missing required EvidenceOS deliverable {}", path),
+            ));
+        }
+    }
+    Ok(("PASS".to_string(), "ok".to_string()))
+}
+
+fn evaluate_evidenceos_mapping_review_gate(bundle_zip: &Path) -> CoreResult<(String, String)> {
+    let path = "exports/evidenceos/deliverables/evidence_mapping_review.json";
+    let file = File::open(bundle_zip)?;
+    let mut zip = ZipArchive::new(file).map_err(|e| crate::error::CoreError::Zip(e.to_string()))?;
+    if !is_evidenceos_pack(&mut zip) {
+        return Ok(("NOT_APPLICABLE".to_string(), "not evidenceos pack".to_string()));
+    }
+    let mut f = match zip.by_name(path) {
+        Ok(v) => v,
+        Err(_) => return Ok(("FAIL".to_string(), format!("missing {}", path))),
+    };
+    let mut body = String::new();
+    f.read_to_string(&mut body)?;
+    let parsed: Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok((
+                "FAIL".to_string(),
+                format!("invalid JSON in {}: {}", path, e),
+            ))
+        }
+    };
+    let schema = parsed
+        .get("schema_version")
+        .and_then(|x| x.as_str())
+        .unwrap_or("");
+    if schema != "EVIDENCE_MAPPING_REVIEW_V1" {
+        return Ok((
+            "FAIL".to_string(),
+            format!("unexpected schema_version {} in {}", schema, path),
+        ));
+    }
+    Ok(("PASS".to_string(), "ok".to_string()))
+}
+
+fn is_evidenceos_pack<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>) -> bool {
+    let mut f = match zip.by_name("BUNDLE_INFO.json") {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let mut body = String::new();
+    if f.read_to_string(&mut body).is_err() {
+        return false;
+    }
+    let parsed: Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    parsed
+        .get("pack_id")
+        .and_then(|x| x.as_str())
+        .map(|x| x == "evidenceos")
+        .unwrap_or(false)
 }
 
 fn evaluate_offline_allowlist_from_ndjson(ndjson: &str) -> (String, String) {

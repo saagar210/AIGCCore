@@ -1,94 +1,59 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-use aigc_core::adapters::pinning::{classify_pinning_level, PinningLevel};
+use aigc_core::adapters::pinning::{PinningLevel, ModelSnapshot};
 use aigc_core::audit::event::{Actor, AuditEvent};
 use aigc_core::audit::log::AuditLog;
 use aigc_core::determinism::json_canonical;
 use aigc_core::determinism::run_id::sha256_hex;
+use aigc_core::eval::runner::EvalRunner;
 use aigc_core::evidence_bundle::artifact_hashes::{render_artifact_hashes_csv, ArtifactHashRow};
+use aigc_core::evidence_bundle::builder::EvidenceBundleBuilder;
 use aigc_core::evidence_bundle::schemas::*;
-use aigc_core::evidenceos::control_library::{controls_for_capabilities, ControlDefinition};
 use aigc_core::evidenceos::model::{CitationInput, EvidenceItem, NarrativeClaimInput};
 use aigc_core::evidenceos::workflow::{generate_evidenceos_artifacts, EvidenceOsRequest};
 use aigc_core::policy::network_snapshot::{AdapterEndpointSnapshot, NetworkSnapshot};
 use aigc_core::policy::types::{InputExportProfile, NetworkMode, PolicyMode, ProofLevel};
-use aigc_core::run::manager::{ExportRequest, RunManager};
-use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
+use aigc_core::validator::BundleValidator;
+use serde_json::json;
+use std::path::Path;
 
-#[derive(Debug, Serialize)]
-struct UiNetworkSnapshot {
-    network_mode: &'static str,
-    proof_level: &'static str,
-    ui_remote_fetch_disabled: bool,
+#[test]
+fn evidenceos_bundle_validates_and_is_deterministic() {
+    let temp = tempfile::tempdir().unwrap();
+    let bundle_root_1 = temp.path().join("bundle_1");
+    let bundle_root_2 = temp.path().join("bundle_2");
+    let zip_1 = temp.path().join("bundle_1.zip");
+    let zip_2 = temp.path().join("bundle_2.zip");
+
+    let inputs_1 = make_inputs(&bundle_root_1).unwrap();
+    let inputs_2 = make_inputs(&bundle_root_2).unwrap();
+
+    EvidenceBundleBuilder::build_dir(&bundle_root_1, &inputs_1).unwrap();
+    EvidenceBundleBuilder::build_dir(&bundle_root_2, &inputs_2).unwrap();
+
+    let hash_1 = EvidenceBundleBuilder::build_zip(&bundle_root_1, &zip_1).unwrap();
+    let hash_2 = EvidenceBundleBuilder::build_zip(&bundle_root_2, &zip_2).unwrap();
+    assert_eq!(hash_1, hash_2);
+
+    let validator = BundleValidator::new_v3();
+    let summary = validator.validate_zip(&zip_1, PolicyMode::STRICT).unwrap();
+    assert_eq!(summary.overall, "PASS");
+
+    let eval = EvalRunner::new_v3().unwrap();
+    let gates = eval.run_all_for_bundle(&zip_1, PolicyMode::STRICT).unwrap();
+    assert!(gates.iter().any(|g| g.gate_id == "EVIDENCEOS.OUTPUTS_PRESENT_V1" && g.result == "PASS"));
+    assert!(gates.iter().any(|g| g.gate_id == "EVIDENCEOS.MAPPING_REVIEW_PRESENT_V1" && g.result == "PASS"));
 }
 
-#[derive(Debug, Serialize)]
-struct EvidenceOsRunResult {
-    status: String,
-    bundle_path: String,
-    bundle_sha256: String,
-    missing_control_ids: Vec<String>,
-}
-
-// Phase_2_5_Lock_Addendum_v2.5-lock-4.md §1.1 Layer B:
-// UI must not make arbitrary network calls; UI uses invoke into Rust.
-#[tauri::command]
-fn get_network_snapshot() -> UiNetworkSnapshot {
-    UiNetworkSnapshot {
-        network_mode: "OFFLINE",
-        proof_level: "OFFLINE_STRICT",
-        ui_remote_fetch_disabled: true,
-    }
-}
-
-#[tauri::command]
-fn list_control_library(enabled_capabilities: Option<Vec<String>>) -> Vec<ControlDefinition> {
-    controls_for_capabilities(&enabled_capabilities.unwrap_or_default())
-}
-
-#[tauri::command]
-fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
-    let runtime_dir = make_runtime_dir()?;
-    let bundle_root = runtime_dir.join("bundle_root");
-    let bundle_zip = runtime_dir.join("evidence_bundle_evidenceos_v1.zip");
-    let audit_path = runtime_dir.join("audit.ndjson");
-
-    let input_bytes = b"evidenceos-ui-demo-input";
+fn make_inputs(bundle_root: &Path) -> Result<EvidenceBundleInputs, Box<dyn std::error::Error>> {
+    let input_bytes = b"evidence-input-bytes";
     let input_sha = sha256_hex(input_bytes);
-    let artifact_id = "a_ui_0001".to_string();
-    let manifest_inputs_fingerprint = sha256_hex(format!("{}:{}", artifact_id, input_sha).as_bytes());
-    let run_id = format!("r_{}", &manifest_inputs_fingerprint[..32]);
-    let vault_id = "v_ui_0001".to_string();
+    let artifact_id = "a_ev_0001".to_string();
+    let run_fingerprint = sha256_hex(format!("{}:{}", artifact_id, input_sha).as_bytes());
+    let run_id = format!("r_{}", &run_fingerprint[..32]);
+    let vault_id = "v_0001".to_string();
     let pack_id = "evidenceos".to_string();
     let pack_version = "1.0.0".to_string();
 
-    let mut audit = AuditLog::open_or_create(&audit_path).map_err(|e| e.to_string())?;
-    let events = vec![
-        ("VAULT_ENCRYPTION_STATUS", Actor::System, serde_json::json!({"encryption_at_rest": true, "algorithm": "XCHACHA20_POLY1305", "key_storage": "FILE_FALLBACK"})),
-        ("NETWORK_MODE_SET", Actor::User, serde_json::json!({"network_mode":"OFFLINE","proof_level":"OFFLINE_STRICT","ui_remote_fetch_disabled":true})),
-        ("ALLOWLIST_UPDATED", Actor::System, serde_json::json!({"allowlist_hash_sha256": sha256_hex(b""), "allowlist_count":0})),
-        ("EGRESS_REQUEST_BLOCKED", Actor::System, serde_json::json!({
-            "destination":{"scheme":"https","host":"example.invalid","port":443,"path":"/"},
-            "block_reason":"OFFLINE_MODE",
-            "request_hash_sha256": sha256_hex(b"blocked")
-        })),
-    ];
-    for (event_type, actor, details) in events {
-        audit.append(AuditEvent {
-            ts_utc: "2026-02-10T00:00:00Z".to_string(),
-            event_type: event_type.to_string(),
-            run_id: run_id.clone(),
-            vault_id: vault_id.clone(),
-            actor,
-            details,
-            prev_event_hash: String::new(),
-            event_hash: String::new(),
-        })
-        .map_err(|e| e.to_string())?;
-    }
-
-    let req = EvidenceOsRequest {
+    let evidence_req = EvidenceOsRequest {
         pack_id: pack_id.clone(),
         pack_version: pack_version.clone(),
         run_id: run_id.clone(),
@@ -97,7 +62,7 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
         evidence_items: vec![EvidenceItem {
             artifact_id: artifact_id.clone(),
             artifact_sha256: input_sha.clone(),
-            title: "UI generated offline proof artifact".to_string(),
+            title: "Network posture report".to_string(),
             tags: vec!["OPS".to_string()],
             control_family_labels: vec![
                 "Auditability".to_string(),
@@ -107,12 +72,11 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
         }],
         narrative_claims: vec![NarrativeClaimInput {
             claim_id: "C0001".to_string(),
-            text: "The EvidenceOS run remained offline with blocked network egress attempts."
-                .to_string(),
+            text: "The run stayed offline and recorded blocked egress attempts.".to_string(),
             citations: vec![CitationInput {
                 artifact_id: artifact_id.clone(),
                 locator_type: "PDF_TEXT_SPAN_V1".to_string(),
-                locator: serde_json::json!({
+                locator: json!({
                     "page_index": 0,
                     "start_char": 0,
                     "end_char": 30,
@@ -121,17 +85,44 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
             }],
         }],
     };
-    let generated = generate_evidenceos_artifacts(&req).map_err(|e| e.to_string())?;
+    let pack_artifacts = generate_evidenceos_artifacts(&evidence_req)?;
+
+    let audit_path = bundle_root.join("audit.ndjson");
+    let mut audit = AuditLog::open_or_create(&audit_path)?;
+    let base_events = vec![
+        ("NETWORK_MODE_SET", Actor::User, json!({"network_mode":"OFFLINE","proof_level":"OFFLINE_STRICT","ui_remote_fetch_disabled":true})),
+        ("ALLOWLIST_UPDATED", Actor::System, json!({"allowlist_hash_sha256": sha256_hex(b""), "allowlist_count":0})),
+        ("EGRESS_REQUEST_BLOCKED", Actor::System, json!({
+            "destination":{"scheme":"https","host":"example.invalid","port":443,"path":"/"},
+            "block_reason":"OFFLINE_MODE",
+            "request_hash_sha256": sha256_hex(b"blocked")
+        })),
+        ("VAULT_ENCRYPTION_STATUS", Actor::System, json!({
+            "encryption_at_rest": true,
+            "algorithm": "XCHACHA20_POLY1305",
+            "key_storage": "FILE_FALLBACK"
+        })),
+    ];
+    for (event_type, actor, details) in base_events {
+        audit.append(AuditEvent {
+            ts_utc: "2026-02-10T00:00:00Z".to_string(),
+            event_type: event_type.to_string(),
+            run_id: run_id.clone(),
+            vault_id: vault_id.clone(),
+            actor,
+            details,
+            prev_event_hash: String::new(),
+            event_hash: String::new(),
+        })?;
+    }
+    let audit_log_ndjson = std::fs::read_to_string(&audit_path)?;
 
     let templates_rel = format!("exports/{}/attachments/templates_used.json", pack_id);
     let citations_rel = format!("exports/{}/attachments/citations_map.json", pack_id);
     let redactions_rel = format!("exports/{}/attachments/redactions_map.json", pack_id);
-    let templates_bytes =
-        json_canonical::to_canonical_bytes(&generated.templates_used_json).map_err(|e| e.to_string())?;
-    let citations_bytes =
-        json_canonical::to_canonical_bytes(&generated.citations_map_json).map_err(|e| e.to_string())?;
-    let redactions_bytes =
-        json_canonical::to_canonical_bytes(&generated.redactions_map_json).map_err(|e| e.to_string())?;
+    let templates_bytes = json_canonical::to_canonical_bytes(&pack_artifacts.templates_used_json)?;
+    let citations_bytes = json_canonical::to_canonical_bytes(&pack_artifacts.citations_map_json)?;
+    let redactions_bytes = json_canonical::to_canonical_bytes(&pack_artifacts.redactions_map_json)?;
 
     let mut hash_rows = vec![ArtifactHashRow {
         artifact_id: artifact_id.clone(),
@@ -141,7 +132,7 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
         content_type: "text/plain".to_string(),
         logical_role: "INPUT".to_string(),
     }];
-    for (path, bytes, content_type) in &generated.deliverables {
+    for (path, bytes, content_type) in &pack_artifacts.deliverables {
         hash_rows.push(ArtifactHashRow {
             artifact_id: format!("o:{}", path),
             bundle_rel_path: path.clone(),
@@ -153,7 +144,7 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
     }
     hash_rows.push(ArtifactHashRow {
         artifact_id: format!("o:{}", templates_rel),
-        bundle_rel_path: templates_rel.clone(),
+        bundle_rel_path: templates_rel,
         sha256: sha256_hex(&templates_bytes),
         bytes: templates_bytes.len() as u64,
         content_type: "application/json".to_string(),
@@ -161,7 +152,7 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
     });
     hash_rows.push(ArtifactHashRow {
         artifact_id: format!("o:{}", citations_rel),
-        bundle_rel_path: citations_rel.clone(),
+        bundle_rel_path: citations_rel,
         sha256: sha256_hex(&citations_bytes),
         bytes: citations_bytes.len() as u64,
         content_type: "application/json".to_string(),
@@ -169,15 +160,15 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
     });
     hash_rows.push(ArtifactHashRow {
         artifact_id: format!("o:{}", redactions_rel),
-        bundle_rel_path: redactions_rel.clone(),
+        bundle_rel_path: redactions_rel,
         sha256: sha256_hex(&redactions_bytes),
         bytes: redactions_bytes.len() as u64,
         content_type: "application/json".to_string(),
         logical_role: "ATTACHMENT".to_string(),
     });
-    let artifact_hashes_csv = render_artifact_hashes_csv(hash_rows).map_err(|e| e.to_string())?;
+    let artifact_hashes_csv = render_artifact_hashes_csv(hash_rows)?;
 
-    let outputs: Vec<ManifestOutputRef> = generated
+    let outputs: Vec<ManifestOutputRef> = pack_artifacts
         .deliverables
         .iter()
         .map(|(path, bytes, content_type)| ManifestOutputRef {
@@ -189,13 +180,13 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
         })
         .collect();
 
-    let bundle_inputs = EvidenceBundleInputs {
+    Ok(EvidenceBundleInputs {
         run_manifest: RunManifest {
             run_id: run_id.clone(),
             vault_id: vault_id.clone(),
             determinism: DeterminismManifest {
                 enabled: true,
-                manifest_inputs_fingerprint,
+                manifest_inputs_fingerprint: run_fingerprint,
             },
             inputs: vec![ManifestArtifactRef {
                 artifact_id: artifact_id.clone(),
@@ -223,7 +214,7 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
             core_build: "dev".to_string(),
             run_id: run_id.clone(),
         },
-        audit_log_ndjson: std::fs::read_to_string(&audit_path).map_err(|e| e.to_string())?,
+        audit_log_ndjson,
         eval_report: EvalReport {
             overall_status: "PASS".to_string(),
             tests: vec![],
@@ -266,72 +257,21 @@ fn generate_evidenceos_bundle_demo() -> Result<EvidenceOsRunResult, String> {
                 validation_error: None,
             }],
         },
-        model_snapshot: aigc_core::adapters::pinning::ModelSnapshot {
+        model_snapshot: ModelSnapshot {
             adapter_id: "local_adapter".to_string(),
             adapter_version: "1.0.0".to_string(),
             adapter_endpoint: "http://127.0.0.1:11434".to_string(),
             model_id: "model-a".to_string(),
             model_sha256: Some(sha256_hex(b"model-a")),
-            pinning_level: {
-                let m = sha256_hex(b"model-a");
-                classify_pinning_level(Some(&m), "local_adapter", "1.0.0")
-            },
+            pinning_level: PinningLevel::CRYPTO_PINNED,
         },
-        pack_id: pack_id.clone(),
+        pack_id,
         pack_version,
-        deliverables: generated.deliverables,
+        deliverables: pack_artifacts.deliverables,
         attachments: PackAttachments {
-            templates_used_json: generated.templates_used_json,
-            citations_map_json: Some(generated.citations_map_json),
-            redactions_map_json: Some(generated.redactions_map_json),
+            templates_used_json: pack_artifacts.templates_used_json,
+            citations_map_json: Some(pack_artifacts.citations_map_json),
+            redactions_map_json: Some(pack_artifacts.redactions_map_json),
         },
-    };
-
-    let mut manager = RunManager::new(audit);
-    let export_req = ExportRequest {
-        run_id: run_id.clone(),
-        vault_id,
-        policy_mode: PolicyMode::STRICT,
-        network_mode: NetworkMode::OFFLINE,
-        proof_level: ProofLevel::OFFLINE_STRICT,
-        pinning_level: PinningLevel::CRYPTO_PINNED,
-        requested_by: "user".to_string(),
-    };
-    let outcome = manager
-        .export_run(&export_req, &bundle_inputs, &bundle_root, &bundle_zip)
-        .map_err(|e| format!("failed to export EvidenceOS bundle: {}", e))?;
-    if outcome.status != "COMPLETED" {
-        return Err(format!(
-            "EvidenceOS export did not complete. status={} block_reason={:?}",
-            outcome.status, outcome.block_reason
-        ));
-    }
-
-    Ok(EvidenceOsRunResult {
-        status: outcome.status,
-        bundle_path: outcome.bundle_path.unwrap_or_default(),
-        bundle_sha256: outcome.bundle_sha256.unwrap_or_default(),
-        missing_control_ids: generated.missing_control_ids,
     })
-}
-
-fn make_runtime_dir() -> Result<std::path::PathBuf, String> {
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis();
-    let path = std::env::temp_dir().join(format!("aigc_evidenceos_{}", ts));
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    Ok(path)
-}
-
-fn main() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            get_network_snapshot,
-            list_control_library,
-            generate_evidenceos_bundle_demo
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
 }

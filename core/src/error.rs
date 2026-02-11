@@ -11,6 +11,9 @@ pub enum CoreError {
     #[error("policy blocked: {0}")]
     PolicyBlocked(String),
 
+    #[error("evidenceos validation failed: {0}")]
+    EvidenceOsValidation(String),
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 

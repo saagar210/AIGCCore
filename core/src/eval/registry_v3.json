@@ -268,8 +268,48 @@
         "exports/**/deliverables/*.pdf",
         "run_manifest.json"
       ]
+    },
+    {
+      "gate_id": "EVIDENCEOS.OUTPUTS_PRESENT_V1",
+      "category": "EVIDENCEOS",
+      "severity": "BLOCKER",
+      "applies_to_policies": [
+        "STRICT",
+        "BALANCED",
+        "DRAFT_ONLY"
+      ],
+      "pass_criteria": {
+        "required_deliverables": [
+          "exports/evidenceos/deliverables/evidence_index.csv",
+          "exports/evidenceos/deliverables/evidence_index.md",
+          "exports/evidenceos/deliverables/evidence_narrative.md",
+          "exports/evidenceos/deliverables/missing_evidence_checklist.md"
+        ]
+      },
+      "evidence_required": [
+        "exports/evidenceos/deliverables/evidence_index.csv",
+        "exports/evidenceos/deliverables/evidence_index.md",
+        "exports/evidenceos/deliverables/evidence_narrative.md",
+        "exports/evidenceos/deliverables/missing_evidence_checklist.md"
+      ]
+    },
+    {
+      "gate_id": "EVIDENCEOS.MAPPING_REVIEW_PRESENT_V1",
+      "category": "EVIDENCEOS",
+      "severity": "BLOCKER",
+      "applies_to_policies": [
+        "STRICT",
+        "BALANCED",
+        "DRAFT_ONLY"
+      ],
+      "pass_criteria": {
+        "required_mapping_review_file": "exports/evidenceos/deliverables/evidence_mapping_review.json",
+        "required_schema": "EVIDENCE_MAPPING_REVIEW_V1"
+      },
+      "evidence_required": [
+        "exports/evidenceos/deliverables/evidence_mapping_review.json"
+      ]
     }
   ],
   "generated_at_ms": 0
 }
-
