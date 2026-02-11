@@ -15,9 +15,6 @@ pub enum CoreError {
     PolicyViolationError(String),
 
     #[error("determinism violation: {0}")]
-    DeterminismViolation(String),
-
-    #[error("determinism violation: {0}")]
     DeterminismViolationError(String),
 
     #[error("citation violation: {0}")]
