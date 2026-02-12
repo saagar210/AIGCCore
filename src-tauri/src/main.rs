@@ -23,7 +23,7 @@ use aigc_core::policy::network_snapshot::{AdapterEndpointSnapshot, NetworkSnapsh
 use aigc_core::policy::types::{InputExportProfile, NetworkMode, PolicyMode, ProofLevel};
 use aigc_core::redlineos::model::RedlineOsInputV1;
 use aigc_core::redlineos::render::output_manifest as redline_output_manifest;
-use aigc_core::redlineos::workflow::RedlineWorkflowState;
+use aigc_core::redlineos::workflow::{self, RedlineWorkflowState};
 use aigc_core::run::manager::{ExportRequest, RunManager};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -396,16 +396,106 @@ fn generate_evidenceos_bundle(input: EvidenceOsRunInput) -> Result<EvidenceOsRun
 
 #[tauri::command]
 fn run_redlineos(input: RedlineOsInputV1) -> Result<PackCommandStatus, String> {
-    let _state = RedlineWorkflowState::ingest(input).map_err(|e| e.to_string())?;
-    let manifest = redline_output_manifest();
-    Ok(PackCommandStatus {
-        status: "READY".to_string(),
-        message: format!(
-            "Stage 0 scaffold validated. {} deliverables, {} attachments declared.",
-            manifest.deliverable_paths.len(),
-            manifest.attachment_paths.len()
-        ),
-    })
+    // Step 1: Validate input
+    let _state = RedlineWorkflowState::ingest(input.clone()).map_err(|e| e.to_string())?;
+
+    // Step 2: Generate contract bytes (MVP: use demo PDF)
+    // In production, would load from vault
+    let contract_bytes = include_bytes!("../../core/corpus/contracts/digital_sample.pdf").to_vec();
+
+    // Step 3: Execute RedlineOS workflow (extract → segment → assess → render)
+    let workflow_output = workflow::execute_redlineos_workflow(input.clone(), &contract_bytes)
+        .map_err(|e| format!("Workflow failed: {}", e))?;
+
+    // Step 4: Create export request with policy context
+    let run_id = format!("redlineos_{}", &sha256_hex(&contract_bytes)[..16]);
+    let vault_id = "v_default".to_string();
+    let export_request = ExportRequest {
+        run_id: run_id.clone(),
+        vault_id: vault_id.clone(),
+        policy_mode: aigc_core::policy::types::PolicyMode::Strict,
+        network_mode: aigc_core::policy::types::NetworkMode::Offline,
+        proof_level: aigc_core::policy::types::ProofLevel::OfflineStrict,
+        pinning_level: PinningLevel::VersionOnly,
+        requested_by: "ui".to_string(),
+    };
+
+    // Step 5: Prepare bundle directory and ZIP path
+    let runtime_dir = make_runtime_dir()?;
+    let bundle_root = runtime_dir.join("redlineos_bundle");
+    let bundle_zip = runtime_dir.join("evidence_bundle_redlineos_v1.zip");
+
+    // Step 6: Create audit log
+    let audit_path = runtime_dir.join("audit.ndjson");
+    let mut audit = AuditLog::open_or_create(&audit_path).map_err(|e| e.to_string())?;
+
+    // Step 7: Create bundle inputs with RedlineOS artifacts
+    let bundle_inputs = EvidenceBundleInputs {
+        run_id: run_id.clone(),
+        pack_id: "redlineos".to_string(),
+        pack_version: "1.0.0".to_string(),
+        deliverables: vec![
+            (
+                "exports/redlineos/deliverables/risk_memo.md".to_string(),
+                workflow_output.risk_memo.clone(),
+            ),
+            (
+                "exports/redlineos/deliverables/clause_map.csv".to_string(),
+                workflow_output.clause_map.clone(),
+            ),
+            (
+                "exports/redlineos/deliverables/redline_suggestions.md".to_string(),
+                workflow_output.suggestions.clone(),
+            ),
+        ],
+        attachments: vec![
+            (
+                "exports/redlineos/attachments/templates_used.json".to_string(),
+                json!({ "template": "redlineos_v1", "extraction_mode": input.extraction_mode }).to_string(),
+            ),
+        ],
+        inputs_snapshot: json!({
+            "network_snapshot": {
+                "network_mode": "OFFLINE",
+                "proof_level": "OFFLINE_STRICT"
+            },
+            "policy_snapshot": {
+                "policy_mode": "Strict",
+                "export_profile": { "inputs": "HASH_ONLY" }
+            },
+            "model_snapshot": {
+                "pinning_level": "VersionOnly"
+            }
+        }).to_string(),
+        artifact_hashes: vec![],  // Would be populated during bundle generation
+        audit_log_ndjson: String::new(),  // Would be populated from audit.ndjson
+    };
+
+    // Step 8: Create RunManager and execute export pipeline
+    let mut run_manager = RunManager::new(audit);
+    let outcome = run_manager
+        .export_run(&export_request, &bundle_inputs, &bundle_root, &bundle_zip)
+        .map_err(|e| format!("Export failed: {}", e))?;
+
+    // Step 9: Return result
+    match outcome.status.as_str() {
+        "COMPLETED" => Ok(PackCommandStatus {
+            status: "SUCCESS".to_string(),
+            message: format!(
+                "RedlineOS bundle exported. Risk level: {} HIGH risks. Extraction confidence: {:.0}%",
+                workflow_output.high_risk_count,
+                workflow_output.extraction_confidence * 100.0
+            ),
+        }),
+        "BLOCKED" => Ok(PackCommandStatus {
+            status: "BLOCKED".to_string(),
+            message: format!("Export blocked: {:?}", outcome.block_reason),
+        }),
+        _ => Ok(PackCommandStatus {
+            status: "FAILED".to_string(),
+            message: "Export failed".to_string(),
+        }),
+    }
 }
 
 #[tauri::command]
