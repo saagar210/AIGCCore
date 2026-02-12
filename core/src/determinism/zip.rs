@@ -46,7 +46,7 @@ pub fn zip_dir_deterministic(root_dir: &Path, out_zip: &Path) -> CoreResult<Stri
 
     // DOS epoch (zip format): earliest representable time is 1980-01-01.
     let fixed_time = zip::DateTime::from_date_and_time(1980, 1, 1, 0, 0, 0).map_err(|_| {
-        CoreError::DeterminismViolation("failed to create fixed zip datetime".to_string())
+        CoreError::DeterminismViolationError("failed to create fixed zip datetime".to_string())
     })?;
 
     // zip::write::FileOptions provides unix_permissions and last_modified_time.
