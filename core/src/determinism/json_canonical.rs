@@ -42,7 +42,7 @@ fn normalize_value(v: Value) -> CoreResult<Value> {
             if n.is_i64() || n.is_u64() {
                 Ok(Value::Number(n))
             } else {
-                Err(CoreError::DeterminismViolation(
+                Err(CoreError::DeterminismViolationError(
                     "canonical JSON forbids non-integer numbers".to_string(),
                 ))
             }

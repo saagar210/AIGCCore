@@ -249,15 +249,7 @@ export function App() {
           running={futurePackRunning === "run_redlineos"}
           result={futurePackResult.run_redlineos ?? null}
           error={futurePackError.run_redlineos ?? null}
-          onRun={() =>
-            runFuturePack("run_redlineos", {
-              schema_version: "REDLINEOS_INPUT_V1",
-              contract_artifacts: [{ artifact_id: "a_demo", sha256: "demo", filename: "contract.pdf" }],
-              extraction_mode: "OCR",
-              jurisdiction_hint: "US-CA",
-              review_profile: "default"
-            })
-          }
+          onRun={(input) => runFuturePack("run_redlineos", input)}
         />
         <IncidentOSPanel
           running={futurePackRunning === "run_incidentos"}
