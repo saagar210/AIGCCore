@@ -142,7 +142,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">AIGC Core</div>
+        <h1 className="brand">AIGC Core</h1>
         <div className="badge" data-mode={snap?.network_mode ?? "UNKNOWN"}>
           Network: <strong>{status}</strong>
         </div>

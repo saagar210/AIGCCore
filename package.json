@@ -7,14 +7,23 @@
   "scripts": {
     "dev:ui": "vite",
     "build:ui": "vite build",
+    "preview:ui": "vite preview --host 127.0.0.1 --port 4102",
     "dev": "tauri dev",
     "lean:dev": "bash tools/dev/lean-dev.sh",
     "build": "tauri build",
     "clean:heavy": "bash tools/dev/clean-heavy-artifacts.sh",
     "clean:full-local": "bash tools/dev/clean-full-local.sh",
     "lint": "eslint .",
+    "ui:lint": "pnpm lint && stylelint \"src/**/*.{css,scss}\" --allow-empty-input",
+    "ui:typecheck": "tsc --noEmit",
+    "ui:gate:static": "pnpm ui:lint && pnpm ui:typecheck",
+    "ui:test:visual": "playwright test tests/ui --grep @visual",
+    "ui:test:a11y": "playwright test tests/ui --grep @a11y",
+    "ui:gate:regression": "pnpm ui:test:visual && pnpm ui:test:a11y",
+    "ui:gate": "pnpm ui:gate:static && pnpm ui:gate:regression",
     "test": "vitest run",
-    "gate:all": "node tools/gates/run-all.mjs"
+    "gate:all": "node tools/gates/run-all.mjs",
+    "ui:test:visual:update": "playwright test tests/ui --grep @visual --update-snapshots"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -22,7 +31,10 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
     "@eslint/js": "^9.39.2",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.56.1",
     "@tauri-apps/cli": "^2.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -30,8 +42,17 @@
     "@typescript-eslint/parser": "^8.55.0",
     "@vitejs/plugin-react": "^4.3.2",
     "eslint": "^9.9.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-tailwindcss": "^3.18.2",
+    "lighthouse": "^12.8.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.7.1",
+    "stylelint": "^16.25.0",
+    "stylelint-config-standard": "^39.0.1",
     "typescript": "^5.6.2",
     "vite": "^5.4.6",
-    "vitest": "^2.0.5"
+    "vitest": "^2.0.5",
+    "web-vitals": "^5.1.0"
   }
 }
