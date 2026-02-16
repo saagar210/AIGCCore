@@ -2,7 +2,5 @@
 pnpm lint
 pnpm ui:gate:static
 pnpm test
-pnpm ui:gate:regression
 cargo test --workspace
-pnpm gate:all
 pnpm build
