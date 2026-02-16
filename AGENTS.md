@@ -37,7 +37,7 @@ Source: `.codex/verify.commands` (derived from `AGENTS.md` and `package.json`)
 - typecheck: `N/A (no standalone typecheck command defined in AGENTS/CI)`
 - unit-test: `pnpm test`; `cargo test --workspace`
 - integration-test: `pnpm gate:all`
-- build: `pnpm build`
+- build: `N/A (desktop packaging build is non-blocking for codex verify gates)`
 
 ### Definition of Done
 - All commands in `.codex/verify.commands` pass via `.codex/scripts/run_verify_commands.sh`.

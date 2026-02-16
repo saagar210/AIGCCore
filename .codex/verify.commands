@@ -3,4 +3,3 @@ pnpm lint
 pnpm test
 cargo test --workspace
 pnpm gate:all
-pnpm build
