@@ -10,9 +10,18 @@ Formal release ceremony for `0.1.0` using the release workflow with verification
 ## Trigger
 
 - Workflow: `release-desktop`
-- Run URL: `https://github.com/saagar210/AIGCCore/actions/runs/22545721368`
+- Attempt 1 (master): `https://github.com/saagar210/AIGCCore/actions/runs/22545721368` (`failure`)
+- Attempt 2 (fix branch): `https://github.com/saagar210/AIGCCore/actions/runs/22545911071` (`failure`)
 - Trigger mode: `workflow_dispatch`
 - Input version: `0.1.0`
+
+## Attempt Notes
+
+- Attempt 1 root cause: Windows wix packaging could not locate configured `.ico` icon.
+  - remediation: add `icons/icon.ico` and sized icons in `src-tauri/tauri.conf.json`.
+- Attempt 2 root cause: Windows checksum step attempted to hash output `SHA256SUMS.txt` while writing the same file.
+  - remediation: update `.github/workflows/release-desktop.yml` to precompute file list and exclude `SHA256SUMS.txt`.
+- Next action: rerun `release-desktop` after checksum-fix commit is pushed.
 
 ## Checklist
 

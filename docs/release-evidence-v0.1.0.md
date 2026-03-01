@@ -54,6 +54,9 @@ For SHA `1f30d2bcda8de71b16634d6f63c582af80b95a6d`:
 - PR #28 (`20a8f1b...`): Phase 4/5 runtime and governance closeout merged
 - PR #29 (`db86d52...`): fixed TruffleHog duplicate fail-flag regression on `master`
 - PR #30 (`1f30d2b...`): final closeout of dependency backlog, docs evidence sync, and policy re-tightening verification
+- PR #33 (`pending merge`): Windows release ceremony remediations
+  - add `.ico` icon mapping in Tauri bundle config
+  - exclude `SHA256SUMS.txt` self-hash race in Windows checksum step
 
 ## Branch Protection Snapshot
 
