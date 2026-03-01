@@ -2,6 +2,14 @@
 
 This project does not expose an external HTTP API. The primary runtime interface is the local Tauri command surface.
 
+## Contract Notes (Phase 5)
+
+- Command names and request/response schema remain backward-compatible.
+- Runtime export directories are permission-hardened on Unix (`0o700`).
+- Healthcare run fingerprinting is based on sorted input artifact descriptors.
+- Bundled `audit_log.ndjson` now includes final validation lifecycle evidence before export result is returned.
+- Offline proof events in audit logs may include synthetic control simulation markers (`details.evidence_origin = CONTROL_SIMULATION`) to distinguish policy proof from live traffic.
+
 ## Command: `run_redlineos`
 
 Purpose: Run contract review and export a RedlineOS Evidence Bundle.
