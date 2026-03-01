@@ -38,6 +38,8 @@ Status: Complete
 
 - Latest merge SHA (`origin/master`): `1f30d2bcda8de71b16634d6f63c582af80b95a6d`
 - Release workflow run URL: `https://github.com/saagar210/AIGCCore/actions/runs/22538435713` (`success`)
+- Latest release ceremony run URL: `https://github.com/saagar210/AIGCCore/actions/runs/22546166401` (`success`)
+- Release object URL: `https://github.com/saagar210/AIGCCore/releases/tag/v0.1.0-week1-stable`
 - Release matrix status:
   - Ubuntu: success
   - Windows: success

@@ -52,6 +52,7 @@ Implemented in repository:
   - PR `#28`: `https://github.com/saagar210/AIGCCore/pull/28`
   - PR `#29`: `https://github.com/saagar210/AIGCCore/pull/29`
   - PR `#30`: `https://github.com/saagar210/AIGCCore/pull/30`
+  - PR `#33`: `https://github.com/saagar210/AIGCCore/pull/33`
   - latest merge commit: `1f30d2bcda8de71b16634d6f63c582af80b95a6d`
 - CI evidence on latest merge commit:
   - `quality-gates`: `https://github.com/saagar210/AIGCCore/actions/runs/22545500268` (`success`)
@@ -60,6 +61,8 @@ Implemented in repository:
   - `ui-quality` (latest PR lane): `https://github.com/saagar210/AIGCCore/actions/runs/22545349089` (`success`)
 - Release workflow URL:
   - `https://github.com/saagar210/AIGCCore/actions/runs/22538435713` (`success`)
+  - `https://github.com/saagar210/AIGCCore/actions/runs/22546166401` (`success`)
+  - Release object: `https://github.com/saagar210/AIGCCore/releases/tag/v0.1.0-week1-stable`
 - CodeQL conflict closure:
   - root cause: advanced workflow conflicted with GitHub default CodeQL setup
   - resolution: `.github/workflows/codeql.yml` moved to manual-only trigger in PR #25

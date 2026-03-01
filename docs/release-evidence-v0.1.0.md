@@ -19,6 +19,8 @@ Status: Final
   - `build_signed_artifacts (ubuntu-22.04)`: success
   - `build_signed_artifacts (windows-latest)`: success
   - `build_signed_artifacts (macos-latest)`: success
+- latest ceremony rerun URL: `https://github.com/saagar210/AIGCCore/actions/runs/22546166401` (`success`)
+- published release URL: `https://github.com/saagar210/AIGCCore/releases/tag/v0.1.0-week1-stable`
 
 ## Artifact Checksums (from CI Artifacts)
 
