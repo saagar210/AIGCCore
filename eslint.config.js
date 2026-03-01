@@ -20,11 +20,19 @@ export default [
     },
   },
   {
-    files: ["tools/**/*.mjs"],
+    files: ["tools/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",
         process: "readonly",
+      },
+    },
+  },
+  {
+    files: ["tests/perf/**/*.js"],
+    languageOptions: {
+      globals: {
+        __ENV: "readonly",
       },
     },
   },
